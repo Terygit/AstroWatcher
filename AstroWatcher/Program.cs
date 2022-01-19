@@ -2,32 +2,43 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 
 namespace AstroWatcher
 {
-    internal class Program
+    internal static class Program
     {
         private static String AstroDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Astro", "Saved", "SaveGames");
-        private static String AstroCopy = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Astro", "Saved Backup");
+        private static String BackupDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Astro", "Saved", "SaveGamesBackup");
         private const int KeepCount = 20;
-        private static Boolean UseRecycleBin = true;
-
+        private static bool UseRecycleBin = true;
+        private static String AppName = Assembly.GetEntryAssembly().GetName().Name;
         private static void Main(string[] args)
         {
-            Inform();
-            Run();
+            using var mutex = new Mutex(true, AppName + "Singleton", out bool notAlreadyRunning);
+            if (notAlreadyRunning)
+            {
+                Inform();
+                Run();
+            }
+            else
+            {
+                Environment.Exit(-1);
+            }
         }
 
         private static void Inform()
         {
-            Console.WriteLine($"AstroWatcher copies savegame file from .../SaveGames to .../SavedBackup.");
+            Console.WriteLine($"AstroWatcher copies savegame file from {AstroDirectory} to SaveGamesBackup.");
             Console.WriteLine($"It will keep the latest {KeepCount} saves of the current game.");
             Console.WriteLine("Press 'q' to quit the watcher.");
         }
 
         private static void Run()
         {
+            Directory.CreateDirectory(BackupDirectory);
+
             using (FileSystemWatcher watcher = new FileSystemWatcher())
             {
                 watcher.Path = AstroDirectory;
@@ -60,7 +71,7 @@ namespace AstroWatcher
             Thread.Sleep(500);
             (var prefix, var datetime) = Split(Path.GetFileName(e.FullPath));
             var s = Path.GetFileName(e.FullPath);
-            var destination = AstroCopy + "/" + s;
+            var destination = BackupDirectory + "/" + s;
             if (UseRecycleBin)
                 Console.WriteLine($"Copying {e.Name}");
             if (!File.Exists(destination))
@@ -70,7 +81,7 @@ namespace AstroWatcher
 
         private static void KeepNewestFiles(string prefix)
         {
-            var files = new DirectoryInfo(AstroCopy)
+            var files = new DirectoryInfo(BackupDirectory)
                 .GetFiles($"{prefix}*.savegame")
                 .OrderBy(f => f.LastWriteTime)
                 .ToList();
