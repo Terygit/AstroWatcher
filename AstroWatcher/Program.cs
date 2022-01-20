@@ -1,4 +1,6 @@
-﻿using Microsoft.VisualBasic.FileIO;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Primitives;
+using Microsoft.VisualBasic.FileIO;
 using System;
 using System.IO;
 using System.Linq;
@@ -9,11 +11,10 @@ namespace AstroWatcher
 {
     internal static class Program
     {
-        private static String AstroDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Astro", "Saved", "SaveGames");
-        private static String BackupDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Astro", "Saved", "SaveGamesBackup");
-        private const int KeepCount = 20;
-        private static bool UseRecycleBin = true;
         private static String AppName = Assembly.GetEntryAssembly().GetName().Name;
+        private static String AstroDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Astro", "Saved", "SaveGames");
+        private static String BackupDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Astro", "Saved", Configuration.Options.BackupDirectory);
+
         private static void Main(string[] args)
         {
             using var mutex = new Mutex(true, AppName + "Singleton", out bool notAlreadyRunning);
@@ -30,8 +31,8 @@ namespace AstroWatcher
 
         private static void Inform()
         {
-            Console.WriteLine($"AstroWatcher copies savegame file from {AstroDirectory} to SaveGamesBackup.");
-            Console.WriteLine($"It will keep the latest {KeepCount} saves of the current game.");
+            Console.WriteLine($"AstroWatcher copies savegame file from {AstroDirectory} to {Configuration.Options.BackupDirectory}.");
+            Console.WriteLine($"It will keep the latest {Configuration.Options.KeepCount} saves of the current game.");
             Console.WriteLine("Press 'q' to quit the watcher.");
         }
 
@@ -55,7 +56,7 @@ namespace AstroWatcher
                 watcher.EnableRaisingEvents = true;
 
 
-                while (Console.Read() != 'q') ;
+                while (Console.ReadKey().KeyChar != 'q') ;
             }
         }
 
@@ -72,7 +73,7 @@ namespace AstroWatcher
             (var prefix, var datetime) = Split(Path.GetFileName(e.FullPath));
             var s = Path.GetFileName(e.FullPath);
             var destination = BackupDirectory + "/" + s;
-            if (UseRecycleBin)
+            if (Configuration.Options.UseRecycleBin)
                 Console.WriteLine($"Copying {e.Name}");
             if (!File.Exists(destination))
                 File.Copy(e.FullPath, destination);
@@ -85,14 +86,52 @@ namespace AstroWatcher
                 .GetFiles($"{prefix}*.savegame")
                 .OrderBy(f => f.LastWriteTime)
                 .ToList();
-            for (int i = 0; i < files.Count - KeepCount; i++)
+            for (int i = 0; i < files.Count - Configuration.Options.KeepCount; i++)
             {
-                if (UseRecycleBin)
+                if (Configuration.Options.UseRecycleBin)
                     FileSystem.DeleteFile(files[i].FullName, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
                 else
                     File.Delete(files[i].FullName);
                 Console.WriteLine($"Deleted {files[i].Name}");
             }
         }
+    }
+
+    public class Parameters
+    {
+        public int KeepCount { get; set; }
+        public bool UseRecycleBin { get; set; }
+        public string BackupDirectory { get; set; }
+    }
+
+
+    public class Configuration
+    {
+        private IConfigurationRoot configuration;
+        public static Parameters Options { get => _options; }
+        private static Parameters _options = new Parameters();
+
+        private static Configuration Instance { get; set; }
+        static Configuration()
+        {
+            Instance = new Configuration();
+        }
+        private Configuration()
+        {
+            configuration = new ConfigurationBuilder()
+               .AddJsonFile("config.json", optional: false, reloadOnChange: true)
+               .Build();
+
+            configuration
+                .GetSection(nameof(Options))
+                .Bind(_options);
+
+            ChangeToken.OnChange(() => configuration.GetReloadToken(), onChangeCallback);
+        }
+        private void onChangeCallback()
+        {
+            _options = configuration.GetSection(nameof(Options)).Get<Parameters>();
+        }
+
     }
 }
