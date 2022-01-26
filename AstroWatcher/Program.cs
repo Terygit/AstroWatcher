@@ -5,23 +5,28 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+
 using System.Threading;
 
 namespace AstroWatcher
 {
     internal static class Program
     {
+
         private static String AppName = Assembly.GetEntryAssembly().GetName().Name;
         private static String AstroDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Astro", "Saved", "SaveGames");
         private static String BackupDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Astro", "Saved", Configuration.Options.BackupDirectory);
 
         private static void Main(string[] args)
         {
+
             using var mutex = new Mutex(true, AppName + "Singleton", out bool notAlreadyRunning);
             if (notAlreadyRunning)
             {
+                ProgramHelpers.HideConsoleAfter(2000);
                 Inform();
                 Run();
+
             }
             else
             {
@@ -33,7 +38,8 @@ namespace AstroWatcher
         {
             Console.WriteLine($"AstroWatcher copies savegame file from {AstroDirectory} to {Configuration.Options.BackupDirectory}.");
             Console.WriteLine($"It will keep the latest {Configuration.Options.KeepCount} saves of the current game.");
-            Console.WriteLine("Press 'q' to quit the watcher.");
+            Console.WriteLine($"Press 'q' to quit the watcher.");
+            Console.WriteLine($"This window will minimize now");
         }
 
         private static void Run()
